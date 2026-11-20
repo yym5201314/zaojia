@@ -40,21 +40,23 @@ class AIVisionDialog(tk.Toplevel):
             self.transient(master)
         except Exception:
             pass
+        self.resizable(False, False)
         self._build()
         self._center()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ------------------------------------------------------------ 布局 --
     def _center(self):
+        """固定 1215×510，屏幕居中。"""
+        width, height = 1215, 510
         try:
-            self.update_idletasks()
-            width = max(int(1000 * self.s), self.winfo_reqwidth())
-            height = max(int(660 * self.s), self.winfo_reqheight())
-            x = self.master.winfo_rootx() + (self.master.winfo_width() - width) // 2
-            y = self.master.winfo_rooty() + (self.master.winfo_height() - height) // 3
-            self.geometry("%dx%d+%d+%d" % (max(0, x), max(0, y), width, height))
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            x = max(0, (sw - width) // 2)
+            y = max(0, (sh - height) // 2)
+            self.geometry("%dx%d+%d+%d" % (width, height, x, y))
         except Exception:
-            pass
+            self.geometry("%dx%d" % (width, height))
 
     def _build(self):
         s = self.s
@@ -80,7 +82,7 @@ class AIVisionDialog(tk.Toplevel):
         body.pack(side="top", fill="both", expand=True,
                   padx=int(16 * s), pady=(0, int(6 * s)))
 
-        left = tk.Frame(body, bg=C_APP, width=int(320 * s))
+        left = tk.Frame(body, bg=C_APP, width=250)
         left.pack(side="left", fill="y")
         left.pack_propagate(False)
         tk.Label(left, text="图纸预览", bg=C_APP, fg=C_HINT,
@@ -98,10 +100,10 @@ class AIVisionDialog(tk.Toplevel):
         wrap = tk.Frame(right, bg=C_APP)
         wrap.pack(side="top", fill="both", expand=True, pady=(int(4 * s), 0))
         keys = [key for key, _title in ai_vision.FIELDS]
-        self.tree = ttk.Treeview(wrap, columns=keys, show="headings", height=14)
+        self.tree = ttk.Treeview(wrap, columns=keys, show="headings", height=9)
         for key, title in ai_vision.FIELDS:
             self.tree.heading(key, text=title)
-            self.tree.column(key, width=int(88 * s), anchor="center", stretch=True)
+            self.tree.column(key, width=92, anchor="center", stretch=True)
         bar = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=bar.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -176,7 +178,7 @@ class AIVisionDialog(tk.Toplevel):
                     doc.close()
             else:
                 image = Image.open(path).convert("RGB")
-            image.thumbnail((int(310 * self.s), int(560 * self.s)))
+            image.thumbnail((230, 300))
             self._photo = ImageTk.PhotoImage(image)
             self.lbl_preview.configure(image=self._photo, text="")
         except Exception as exc:
@@ -204,7 +206,9 @@ class AIVisionDialog(tk.Toplevel):
         self._set_status("正在识别…")
 
         def progress(page, total):
-            self._safe_after(lambda: self._set_status("正在识别第 %d / %d 页…" % (page, total)))
+            self._safe_after(lambda: self._set_status(
+                "正在识别第 %d / %d 页…（大图通常需要 30～120 秒，请勿关闭窗口）"
+                % (page, total)))
 
         def worker():
             try:
@@ -229,7 +233,25 @@ class AIVisionDialog(tk.Toplevel):
             self.btn_run.configure(state="normal")
         except Exception:
             pass
-        self._set_status("识别失败：%s" % message, C_ERR)
+        self._set_status("识别失败：%s" % self._friendly_error(message), C_ERR)
+
+    @staticmethod
+    def _friendly_error(message):
+        """把接口原始报错翻译成能照着做的提示。"""
+        text = message or ""
+        low = text.lower()
+        if ("model disabled" in low or "model not found" in low
+                or "does not exist" in low or "invalid model" in low):
+            return ("当前模型在平台上不可用（已下线或未开通）。请到顶部「AI模型」换可识图的模型，"
+                    "如 Qwen/Qwen3-VL-30B-A3B-Instruct、qwen3-vl-plus、glm-4v-plus、gpt-4o")
+        if "401" in text or "invalid api key" in low or "unauthorized" in low:
+            return "API Key 无效或已过期，请到「AI模型」重新填写并保存"
+        if "403" in text:
+            return "无权限调用该模型（未开通 / 未实名 / 额度用尽）：%s" % text
+        if "timed out" in low or "timeout" in low or "超时" in text:
+            return ("请求超时（大图识别慢）。建议换更快的模型，如 Qwen/Qwen3-VL-30B-A3B-Instruct，"
+                    "或把图纸按桩号裁成小块再识别")
+        return text
 
     def _finish_ok(self, rows):
         self._busy = False

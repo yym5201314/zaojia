@@ -18,8 +18,9 @@ PDF_EXTS = (".pdf",)
 SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS
 
 MAX_PAGES = 8          # 一次最多识别页数，避免一次请求过大
-RENDER_DPI = 220       # PDF 渲染分辨率
-IMAGE_MAX_SIDE = 2600  # 送给模型的图片长边上限（图纸文字要够清晰）
+RENDER_DPI = 200       # PDF 渲染分辨率
+IMAGE_MAX_SIDE = 2200  # 送给模型的图片长边上限（图纸文字要够清晰）
+VISION_TIMEOUT = 180   # 视觉模型推理慢，单独放宽超时（秒）
 
 # 表格字段（顺序即预览列顺序）
 FIELDS = [
@@ -157,7 +158,8 @@ def ocr_drawing(profile, path, hint="", on_progress=None, temp_dir=None):
             if hint.strip():
                 prompt += "\n\n补充说明：" + hint.strip()
             reply = ai_model.chat_with_image(profile, prompt, [image],
-                                             max_side=IMAGE_MAX_SIDE)
+                                             max_side=IMAGE_MAX_SIDE,
+                                             timeout=VISION_TIMEOUT)
             rows.extend(parse_rows(reply))
         return rows
     finally:

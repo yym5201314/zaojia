@@ -19,12 +19,14 @@ PROVIDERS = [
     ("DeepSeek", "https://api.deepseek.com/v1",
      ["deepseek-chat", "deepseek-reasoner"], []),
     ("通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1",
-     ["qwen-plus", "qwen-max", "qwen-turbo"], ["qwen-vl-max", "qwen-vl-plus"]),
+     ["qwen-plus", "qwen-max", "qwen-turbo"],
+     ["qwen3-vl-plus", "qwen-vl-max", "qwen-vl-plus", "qwen-vl-ocr"]),
     ("OpenAI", "https://api.openai.com/v1",
      ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"], ["gpt-4o", "gpt-4o-mini"]),
     ("硅基流动", "https://api.siliconflow.cn/v1",
      ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"],
-     ["Qwen/Qwen2.5-VL-72B-Instruct", "deepseek-ai/deepseek-vl2"]),
+     ["Qwen/Qwen3-VL-30B-A3B-Instruct", "Qwen/Qwen3-VL-32B-Instruct",
+      "Qwen/Qwen3-VL-8B-Instruct", "PaddlePaddle/PaddleOCR-VL-1.5"]),
     ("智谱", "https://open.bigmodel.cn/api/paas/v4",
      ["glm-4-plus", "glm-4-flash"], ["glm-4v-plus", "glm-4v"]),
     ("豆包", "https://ark.cn-beijing.volces.com/api/v3",
@@ -205,7 +207,7 @@ def _error_text(exc):
     return "HTTP %s：%s" % (exc.code, detail)
 
 
-def _request(profile, path, payload=None):
+def _request(profile, path, payload=None, timeout=None):
     endpoint = normalize_endpoint(profile.get("endpoint") or "")
     if not endpoint:
         raise RuntimeError("请先填写接口地址")
@@ -219,7 +221,7 @@ def _request(profile, path, payload=None):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers,
                                  method="POST" if data else "GET")
-    timeout = int(profile.get("timeout") or DEFAULT_TIMEOUT)
+    timeout = int(timeout or profile.get("timeout") or DEFAULT_TIMEOUT)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", "replace")
@@ -252,7 +254,7 @@ def list_models(profile):
     return names
 
 
-def chat(profile, messages, temperature=None, max_tokens=None):
+def chat(profile, messages, temperature=None, max_tokens=None, timeout=None):
     model = (profile.get("model") or "").strip()
     if not model:
         raise RuntimeError("请先填写模型名称")
@@ -265,7 +267,7 @@ def chat(profile, messages, temperature=None, max_tokens=None):
     }
     if max_tokens:
         payload["max_tokens"] = int(max_tokens)
-    result = _request(profile, "/chat/completions", payload)
+    result = _request(profile, "/chat/completions", payload, timeout=timeout)
     try:
         content = result["choices"][0]["message"]["content"]
     except Exception:
@@ -285,8 +287,7 @@ def test_connection(profile):
     return reply[:60] if reply else "连接正常（无内容返回）"
 
 
-def image_data_url(path, max_side=1600, quality=85):
-    """把图纸图片压缩成 JPEG 的 data URL；没有 Pillow 时按原图编码。"""
+def _encode_image(path, max_side, quality):
     try:
         from PIL import Image
     except Exception:
@@ -303,23 +304,37 @@ def image_data_url(path, max_side=1600, quality=85):
                                  Image.LANCZOS)
             buf = io.BytesIO()
             img.save(buf, "JPEG", quality=quality, optimize=True)
-            raw = buf.getvalue()
-            mime = "image/jpeg"
+            return buf.getvalue(), "image/jpeg"
         except Exception as exc:
             raise RuntimeError("图片读取失败：%s" % exc)
-    else:
-        if not os.path.exists(path):
-            raise RuntimeError("找不到图片：%s" % path)
-        with open(path, "rb") as fh:
-            raw = fh.read()
-        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
 
-    if len(raw) > 4 * 1024 * 1024:
-        raise RuntimeError("图片压缩后仍超过 4MB，请先裁切或降低分辨率")
+    if not os.path.exists(path):
+        raise RuntimeError("找不到图片：%s" % path)
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+    return raw, mime
+
+
+def image_data_url(path, max_side=1600, quality=85):
+    """把图纸图片压缩成 JPEG 的 data URL；超限时自动降分辨率重压。"""
+    size = max(1, int(max_side))
+    qual = max(40, int(quality))
+    limit = int(3.6 * 1024 * 1024)
+    raw, mime = _encode_image(path, size, qual)
+    for _ in range(4):
+        if len(raw) <= limit:
+            break
+        size = int(size * 0.75)
+        qual = max(60, qual - 8)
+        raw, mime = _encode_image(path, size, qual)
+    if len(raw) > limit:
+        raise RuntimeError("图片压缩后仍超过 3.6MB，请先裁切或降低分辨率")
     return "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
 
 
-def chat_with_image(profile, prompt, paths, max_tokens=None, max_side=1600):
+def chat_with_image(profile, prompt, paths, max_tokens=None, max_side=1600,
+                    timeout=None):
     """发送一张或多张图片，让模型读取图纸内容。"""
     if not is_vision_model(profile.get("model")):
         raise RuntimeError("当前模型不支持看图，请改用带 VL / vision 的模型（如 qwen-vl-max）")
@@ -327,4 +342,5 @@ def chat_with_image(profile, prompt, paths, max_tokens=None, max_side=1600):
     for path in paths:
         content.append({"type": "image_url",
                         "image_url": {"url": image_data_url(path, max_side=max_side)}})
-    return chat(profile, [{"role": "user", "content": content}], max_tokens=max_tokens)
+    return chat(profile, [{"role": "user", "content": content}],
+                max_tokens=max_tokens, timeout=timeout)

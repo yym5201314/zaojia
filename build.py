@@ -22,6 +22,8 @@ def main():
         "--noconfirm",
         "--onefile", "--windowed",
         "--name", NAME,
+        # pkg_resources 用 __import__('pkg_resources.py2_warn') 动态导入，静态分析收集不到
+        "--hidden-import", "pkg_resources.py2_warn",
         "--paths", os.path.join(BASE, "src"),
         "--distpath", os.path.join(BASE, "dist"),
         "--workpath", os.path.join(BASE, "build"),

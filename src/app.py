@@ -12,7 +12,7 @@ from page import AdjustPage, MaterialPage, SewerPage
 from sheet import C_APP, C_MUTED, C_TEXT, FONT
 
 APP_TITLE = "造价计算工具"
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.5"
 DEVELOPER = "开元咨询-三部-Axs"
 
 C_TOP = "#1F3A5F"

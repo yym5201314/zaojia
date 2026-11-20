@@ -64,10 +64,10 @@ class AIModelDialog(tk.Toplevel):
         try:
             self.update_idletasks()
             width = max(int(560 * self.s), self.winfo_reqwidth())
-            height = self.winfo_reqheight()
+            height = self.winfo_reqheight() + int(6 * self.s)
             x = self.master.winfo_rootx() + (self.master.winfo_width() - width) // 2
             y = self.master.winfo_rooty() + (self.master.winfo_height() - height) // 3
-            self.geometry("%dx%d+%d+%d" % (max(0, x), max(0, y), width, height))
+            self.geometry("%dx%d+%d+%d" % (width, height, max(0, x), max(0, y)))
         except Exception:
             pass
 

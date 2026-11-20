@@ -59,8 +59,34 @@ class VisionModelTest(unittest.TestCase):
         self.assertFalse(ai_model.is_vision_model("qwen-plus"))
 
     def test_default_prefers_vision(self):
-        self.assertEqual(ai_model.default_profile("通义千问")["model"], "qwen-vl-max")
+        self.assertEqual(ai_model.default_profile("通义千问")["model"], "qwen3-vl-plus")
         self.assertEqual(ai_model.default_profile("DeepSeek")["model"], "deepseek-chat")
+        # 硅基流动的视觉候选必须是当前可用的模型
+        self.assertTrue(ai_model.is_vision_model(
+            ai_model.default_profile("硅基流动")["model"]))
+        self.assertNotIn("deepseek-vl2",
+                         " ".join(ai_model.model_choices("硅基流动")))
+
+
+class ImageEncodeTest(unittest.TestCase):
+    def test_large_image_auto_shrinks(self):
+        try:
+            from PIL import Image
+        except Exception:
+            self.skipTest("Pillow not installed")
+        import shutil
+        import tempfile
+
+        workdir = tempfile.mkdtemp(prefix="ai_img_test_")
+        try:
+            path = os.path.join(workdir, "big.png")
+            Image.new("RGB", (4200, 3000), "white").save(path)
+            url = ai_model.image_data_url(path, max_side=2200)
+            self.assertTrue(url.startswith("data:image/jpeg;base64,"))
+            self.assertLess(len(url), int(3.6 * 1024 * 1024 * 1.4))
+            self.assertGreater(len(url), 1000)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
 
 
 class DrawingPipelineTest(unittest.TestCase):
