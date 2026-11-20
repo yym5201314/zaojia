@@ -202,12 +202,6 @@ class App:
 
     def _on_ai_saved(self, cfg):
         self.ai_config = cfg
-        engine = cfg.get("engine") or ""
-        model = ((cfg.get("profiles") or {}).get(engine) or {}).get("model") or ""
-        try:
-            self.current_page().flash("AI 模型已保存：%s / %s" % (engine, model), ok=True)
-        except Exception:
-            pass
 
     # ------------------------------------------------------------ 工程 --
     def project_data(self):

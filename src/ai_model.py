@@ -8,29 +8,34 @@
 """
 
 import base64
+import io
 import json
 import os
 import urllib.error
 import urllib.request
 
-# (名称, 默认地址, 常用模型)
+# (名称, 默认地址, 文本模型, 可识图模型)
 PROVIDERS = [
     ("DeepSeek", "https://api.deepseek.com/v1",
-     ["deepseek-chat", "deepseek-reasoner"]),
+     ["deepseek-chat", "deepseek-reasoner"], []),
     ("通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1",
-     ["qwen-plus", "qwen-max", "qwen-turbo"]),
+     ["qwen-plus", "qwen-max", "qwen-turbo"], ["qwen-vl-max", "qwen-vl-plus"]),
     ("OpenAI", "https://api.openai.com/v1",
-     ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"]),
+     ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"], ["gpt-4o", "gpt-4o-mini"]),
     ("硅基流动", "https://api.siliconflow.cn/v1",
-     ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"]),
+     ["Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"],
+     ["Qwen/Qwen2.5-VL-72B-Instruct", "deepseek-ai/deepseek-vl2"]),
     ("智谱", "https://open.bigmodel.cn/api/paas/v4",
-     ["glm-4-plus", "glm-4-flash"]),
+     ["glm-4-plus", "glm-4-flash"], ["glm-4v-plus", "glm-4v"]),
     ("豆包", "https://ark.cn-beijing.volces.com/api/v3",
-     ["doubao-pro-32k"]),
+     ["doubao-pro-32k"], ["doubao-1.5-vision-pro", "doubao-vision-pro-32k"]),
     ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
-     ["gemini-2.0-flash", "gemini-1.5-pro"]),
-    ("自定义", "", []),
+     ["gemini-2.0-flash", "gemini-1.5-pro"], ["gemini-2.0-flash", "gemini-1.5-pro"]),
+    ("自定义", "", [], []),
 ]
+
+VISION_KEYWORDS = ("-vl", "vl-", "vision", "gpt-4o", "gpt-4.1", "gemini",
+                   "glm-4v", "internvl", "llava")
 
 ENGINES = [item[0] for item in PROVIDERS]
 DEFAULT_TEMPERATURE = 0.3
@@ -71,9 +76,25 @@ def provider_preset(engine):
     return PROVIDERS[-1]
 
 
+def model_choices(engine):
+    """下拉候选：可识图模型排在前面，便于选来识别图纸。"""
+    _name, _endpoint, models, vision = provider_preset(engine)
+    ordered = []
+    for item in list(vision) + list(models):
+        if item not in ordered:
+            ordered.append(item)
+    return ordered
+
+
+def is_vision_model(model):
+    name = (model or "").lower()
+    return any(key in name for key in VISION_KEYWORDS)
+
+
 def default_profile(engine):
-    _name, endpoint, models = provider_preset(engine)
-    return {"endpoint": endpoint, "model": (models[0] if models else ""), "key": ""}
+    _name, endpoint, models, vision = provider_preset(engine)
+    first = (vision or models or [""])[0]
+    return {"endpoint": endpoint, "model": first, "key": ""}
 
 
 def _encode(secret):
@@ -262,3 +283,48 @@ def chat(profile, messages, temperature=None, max_tokens=None):
 def test_connection(profile):
     reply = chat(profile, [{"role": "user", "content": "ping"}], max_tokens=8)
     return reply[:60] if reply else "连接正常（无内容返回）"
+
+
+def image_data_url(path, max_side=1600, quality=85):
+    """把图纸图片压缩成 JPEG 的 data URL；没有 Pillow 时按原图编码。"""
+    try:
+        from PIL import Image
+    except Exception:
+        Image = None
+
+    if Image is not None:
+        try:
+            img = Image.open(path)
+            img = img.convert("RGB")
+            width, height = img.size
+            scale = min(1.0, float(max_side) / max(1, max(width, height)))
+            if scale < 1.0:
+                img = img.resize((max(1, int(width * scale)), max(1, int(height * scale))),
+                                 Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, "JPEG", quality=quality, optimize=True)
+            raw = buf.getvalue()
+            mime = "image/jpeg"
+        except Exception as exc:
+            raise RuntimeError("图片读取失败：%s" % exc)
+    else:
+        if not os.path.exists(path):
+            raise RuntimeError("找不到图片：%s" % path)
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+
+    if len(raw) > 4 * 1024 * 1024:
+        raise RuntimeError("图片压缩后仍超过 4MB，请先裁切或降低分辨率")
+    return "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
+
+
+def chat_with_image(profile, prompt, paths, max_tokens=None, max_side=1600):
+    """发送一张或多张图片，让模型读取图纸内容。"""
+    if not is_vision_model(profile.get("model")):
+        raise RuntimeError("当前模型不支持看图，请改用带 VL / vision 的模型（如 qwen-vl-max）")
+    content = [{"type": "text", "text": prompt}]
+    for path in paths:
+        content.append({"type": "image_url",
+                        "image_url": {"url": image_data_url(path, max_side=max_side)}})
+    return chat(profile, [{"role": "user", "content": content}], max_tokens=max_tokens)

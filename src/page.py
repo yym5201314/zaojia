@@ -1043,7 +1043,47 @@ class SewerPage(BasePage):
         self.recompute()
 
     def extra_buttons(self):
-        return [("插入断开行", self.insert_break, "Soft.TButton")]
+        return [("AI 识图", self.do_ai_vision, "Accent.TButton"),
+                ("插入断开行", self.insert_break, "Soft.TButton")]
+
+    # --- AI 识图 ---
+    def do_ai_vision(self):
+        """打开 AI 识图窗口，识别出的行追加到当前表。"""
+        dlg = getattr(self, "vision_dialog", None)
+        if dlg is not None:
+            try:
+                if dlg.winfo_exists():
+                    dlg.deiconify()
+                    dlg.lift()
+                    dlg.focus_force()
+                    return
+            except Exception:
+                pass
+        import ai_vision_ui
+        self.vision_dialog = ai_vision_ui.AIVisionDialog(
+            self.winfo_toplevel(), self.app, on_apply=self.apply_vision_rows,
+            scale=self.s)
+
+    def apply_vision_rows(self, items):
+        """把识图结果（dict 列表）追加成表格行。"""
+        import ai_vision
+
+        self.flush_edit()
+        self.push_undo()
+        rows = [r for r in self.rows if not yw.is_empty_row(r)]
+        for item in items:
+            values = {}
+            for key, _title in ai_vision.FIELDS:
+                value = str(item.get(key, "") or "").strip()
+                if value:
+                    values[key] = value
+            rows.append(yw.new_row(**values))
+        for _ in range(4):
+            rows.append(yw.new_row())
+        self.rows = rows
+        self.set_rows(self.rows)
+        self.refresh()
+        self.flash("已从图纸追加 %d 行，请核对桩号、井号与高程" % len(items), ok=True)
 
     def insert_break(self):
         self.flush_edit()
