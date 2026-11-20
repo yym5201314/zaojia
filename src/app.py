@@ -12,7 +12,7 @@ from page import AdjustPage, MaterialPage, SewerPage
 from sheet import C_APP, C_MUTED, C_TEXT, FONT
 
 APP_TITLE = "造价计算工具"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.3"
 DEVELOPER = "开元咨询-三部-Axs"
 
 C_TOP = "#1F3A5F"
@@ -79,6 +79,12 @@ class App:
                  font=(FONT, 8)).pack(side="right", padx=(int(6 * s), int(18 * s)))
         tk.Label(top, text=DEVELOPER, bg=C_TOP, fg="#C8D9EC",
                  font=(FONT, 9)).pack(side="right", padx=(0, int(10 * s)))
+        self.btn_ai = tk.Button(top, text="AI模型", command=self.open_ai_model,
+                                bg="#2C4E77", fg="#FFFFFF", activebackground="#3A608C",
+                                activeforeground="#FFFFFF", bd=0, relief="flat",
+                                font=(FONT, 9), cursor="hand2",
+                                padx=int(10 * s), pady=int(2 * s))
+        self.btn_ai.pack(side="right", padx=(0, int(12 * s)), pady=(int(2 * s), 0))
 
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(side="top", fill="both", expand=True)
@@ -168,10 +174,38 @@ class App:
             return
         self.last_dir = folder
         try:
+            data = _load_config()
+            data["last_dir"] = folder
             p = _config_path()
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8") as fh:
-                json.dump({"last_dir": folder}, fh, ensure_ascii=False)
+                json.dump(data, fh, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------ AI --
+    def open_ai_model(self):
+        """打开「AI 模型」配置窗口（同一时间只保留一个）。"""
+        dlg = getattr(self, "ai_dialog", None)
+        if dlg is not None:
+            try:
+                if dlg.winfo_exists():
+                    dlg.deiconify()
+                    dlg.lift()
+                    dlg.focus_force()
+                    return
+            except Exception:
+                pass
+        import ai_ui
+        self.ai_dialog = ai_ui.AIModelDialog(self.root, self, scale=self.s,
+                                            on_saved=self._on_ai_saved)
+
+    def _on_ai_saved(self, cfg):
+        self.ai_config = cfg
+        engine = cfg.get("engine") or ""
+        model = ((cfg.get("profiles") or {}).get(engine) or {}).get("model") or ""
+        try:
+            self.current_page().flash("AI 模型已保存：%s / %s" % (engine, model), ok=True)
         except Exception:
             pass
 
