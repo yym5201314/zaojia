@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: 拉取源码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -38,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $v = & .\scripts\ci-version.ps1 -RunNumber $env:GITHUB_RUN_NUMBER -BaseVersion '${{ github.event.inputs.base_version }}'
+          $v = & .\scripts\ci-version.ps1 -BaseVersion '${{ github.event.inputs.base_version }}'
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=v$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Build version: $v"
@@ -64,6 +66,8 @@ jobs:
           $exe = Get-ChildItem -Path (Join-Path $PWD 'dist') -Filter '*.exe' |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $exe) { throw 'exe not found, nothing to release' }
+          $existing = & git ls-remote --tags origin "refs/tags/$tag" 2>$null
+          if ($existing) { Write-Host "tag $tag already exists, skip release"; exit 0 }
           $asset = Join-Path $exe.Directory.FullName ("zaojia-v${{ steps.ver.outputs.version }}.exe")
           Copy-Item -Path $exe.FullName -Destination $asset -Force
           gh release create $tag $asset `
