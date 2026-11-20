@@ -55,12 +55,17 @@ jobs:
         if: >-
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
           (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: 造价计算工具 v${{ steps.ver.outputs.version }}
-          files: 造价计算工具/dist/*.exe
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          make_latest: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = '${{ steps.ver.outputs.tag }}'
+          $exe = Get-ChildItem -Path (Join-Path $PWD '造价计算工具\dist') -Filter '*.exe' |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) { throw 'exe not found, nothing to release' }
+          gh release create $tag $exe.FullName `
+            --title "造价计算工具 v${{ steps.ver.outputs.version }}" `
+            --target '${{ github.sha }}' `
+            --generate-notes --latest
+          Write-Host "released $tag -> $($exe.Name)"
