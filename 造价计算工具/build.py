@@ -8,6 +8,13 @@ import sys
 BASE = os.path.dirname(os.path.abspath(__file__))
 NAME = "造价计算工具"
 
+# 非 UTF-8 控制台（如 CI 的 cp1252）下直接打印中文会抛 UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 
 def main():
     args = [
@@ -22,8 +29,11 @@ def main():
         os.path.join(BASE, "src", "main.py"),
     ]
     print(" ".join(args))
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     try:
-        subprocess.check_call(args, cwd=BASE)
+        subprocess.check_call(args, cwd=BASE, env=env)
     except subprocess.CalledProcessError:
         print("\n打包失败：如果提示拒绝访问，请先关闭正在运行的 %s.exe 再重试。" % NAME)
         return 1
