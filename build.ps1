@@ -16,14 +16,16 @@ $appPy = Join-Path $projectDir 'src\app.py'
 $encoding = New-Object System.Text.UTF8Encoding($false)
 
 $original = Get-Content -Path $appPy -Raw -Encoding UTF8
-$patched = $original
+$stamped = $false
 
 try {
     if ($Version) {
         $clean = $Version.Trim()
-        $patched = [regex]::Replace($original, '(?m)^APP_VERSION\s*=\s*"[^"]*"', 'APP_VERSION = "' + $clean + '"')
-        if ($patched -eq $original) { throw "APP_VERSION line not found in $appPy" }
+        $pattern = [regex]'(?m)^APP_VERSION\s*=\s*"[^"]*"'
+        if (-not $pattern.IsMatch($original)) { throw "APP_VERSION line not found in $appPy" }
+        $patched = $pattern.Replace($original, 'APP_VERSION = "' + $clean + '"')
         [System.IO.File]::WriteAllText($appPy, $patched, $encoding)
+        $stamped = $true
         Write-Host "stamped APP_VERSION = $clean"
     }
 
@@ -35,7 +37,7 @@ try {
         Pop-Location
     }
 } finally {
-    if ($patched -ne $original) {
+    if ($stamped) {
         [System.IO.File]::WriteAllText($appPy, $original, $encoding)
     }
 }
