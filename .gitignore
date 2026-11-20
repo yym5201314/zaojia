@@ -1,0 +1,27 @@
+# 构建产物
+dist/
+*.exe
+*.zip
+
+# PyInstaller 中间产物
+build/
+*.spec
+*.toc
+*.pyz
+*.pyo
+*.pkg
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行/调试残留
+error.log
+_*.ps1
+_*.png
+*.bak
+
+# 本机示例与工程数据（不参与打包 exe，不入库）
+造价计算工具/*.xlsx
+造价计算工具/*.json
