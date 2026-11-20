@@ -68,7 +68,7 @@ jobs:
           if (-not $exe) { throw 'exe not found, nothing to release' }
           $existing = & git ls-remote --tags origin "refs/tags/$tag" 2>$null
           if ($existing) { Write-Host "tag $tag already exists, skip release"; exit 0 }
-          $asset = Join-Path $exe.Directory.FullName ("zaojia-v${{ steps.ver.outputs.version }}.exe")
+          $asset = Join-Path $exe.Directory.FullName ("造价计算工具-v${{ steps.ver.outputs.version }}.exe")
           Copy-Item -Path $exe.FullName -Destination $asset -Force
           gh release create $tag $asset `
             --title "造价计算工具 v${{ steps.ver.outputs.version }}" `

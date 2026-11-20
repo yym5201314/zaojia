@@ -13,7 +13,7 @@ from sheet import C_APP, C_MUTED, C_TEXT, FONT
 
 APP_TITLE = "造价计算工具"
 APP_VERSION = "1.2.1"
-DEVELOPER = "开元咨询-三部-王友强"
+DEVELOPER = "开元咨询-三部-Axs"
 
 C_TOP = "#1F3A5F"
 C_TOP_SUB = "#9FB8D4"
