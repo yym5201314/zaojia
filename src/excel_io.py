@@ -201,9 +201,8 @@ def _is_qty_header(text):
 
 
 def norm_title(text):
-    """表头归一化：去空白、全角括号转半角、转小写。"""
-    t = str(text or "")
-    t = t.replace("\u3000", "").replace(" ", "")
+    """表头归一化：去掉所有空白/换行、全角括号转半角、转小写。"""
+    t = re.sub(r"\s+", "", str(text or ""))
     t = t.replace("（", "(").replace("）", ")")
     return t.strip().lower()
 
@@ -216,7 +215,9 @@ def read_header(grid, max_scan=15):
     for i, row in enumerate(grid[:max_scan]):
         texts = [str(c).strip() if c is not None else "" for c in row]
         joined = "".join(texts)
-        if "序号" not in joined or not any("名称" in t for t in texts):
+        if "序号" not in joined:
+            continue
+        if not any(k in joined for k in ("名称", "井号", "桩号", "项目")):
             continue
         nxt = grid[i + 1] if i + 1 < len(grid) else []
         nxt_texts = [str(c).strip() if c is not None else "" for c in nxt]
@@ -514,6 +515,8 @@ def _col_style(col):
     if kind in ("text", "text_hint"):
         if col.get("pct"):
             return S_PCT_P
+        if col.get("numeric"):
+            return S_NUM_R if role == "result" else S_NUM_P
         return S_TEXT_C if col.get("center") else S_TEXT_WRAP
     if role == "result":
         if kind == "money":

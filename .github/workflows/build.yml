@@ -61,7 +61,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = '${{ steps.ver.outputs.tag }}'
-          $exe = Get-ChildItem -Path (Join-Path $PWD '造价计算工具\dist') -Filter '*.exe' |
+          $exe = Get-ChildItem -Path (Join-Path $PWD 'dist') -Filter '*.exe' |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
           if (-not $exe) { throw 'exe not found, nothing to release' }
           $asset = Join-Path $exe.Directory.FullName ("zaojia-v${{ steps.ver.outputs.version }}.exe")

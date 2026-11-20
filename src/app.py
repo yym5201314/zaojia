@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""主界面：两个页签（量增量减费用调整表 / 材料调差表）"""
+"""主界面：三个页签（材料调差表 / 量增量减费用调整表 / 雨污水工程计算）"""
 
 import json
 import os
@@ -8,15 +8,29 @@ import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
 import sheet
-from page import AdjustPage, MaterialPage
+from page import AdjustPage, MaterialPage, SewerPage
 from sheet import C_APP, C_MUTED, C_TEXT, FONT
 
 APP_TITLE = "造价计算工具"
-APP_VERSION = "2.0"
+APP_VERSION = "2.21"
 DEVELOPER = "开元咨询-三部-王友强"
 
 C_TOP = "#1F3A5F"
 C_TOP_SUB = "#9FB8D4"
+
+
+def _config_path():
+    base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "造价计算工具", "config.json")
+
+
+def _load_config():
+    try:
+        with open(_config_path(), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
 def pick_font(root):
@@ -38,9 +52,13 @@ class App:
         self.root = root
         self.s = scale
         self.file_path = None
-        self.last_dir = os.path.join(os.path.expanduser("~"), "Documents")
-        if not os.path.isdir(self.last_dir):
-            self.last_dir = os.path.expanduser("~")
+        cfg = _load_config()
+        last = str(cfg.get("last_dir") or "")
+        if not os.path.isdir(last):
+            last = os.path.join(os.path.expanduser("~"), "Documents")
+        if not os.path.isdir(last):
+            last = os.path.expanduser("~")
+        self.last_dir = last
         self._style()
         self._build()
 
@@ -54,7 +72,7 @@ class App:
         top.pack_propagate(False)
         tk.Label(top, text="造价计算工具", bg=C_TOP, fg="#FFFFFF",
                  font=(FONT, 15, "bold")).pack(side="left", padx=(int(18 * s), int(12 * s)))
-        tk.Label(top, text="材料调差表　·　量增量减费用调整表　（黄色为参数，绿色为结果）",
+        tk.Label(top, text="材料调差表　·　量增量减费用调整表　·　雨污水工程计算",
                  bg=C_TOP, fg=C_TOP_SUB, font=(FONT, 9)).pack(side="left",
                                                             pady=(int(4 * s), 0))
         tk.Label(top, text="v" + APP_VERSION, bg=C_TOP, fg=C_TOP_SUB,
@@ -66,10 +84,11 @@ class App:
         self.nb.pack(side="top", fill="both", expand=True)
         self.adjust_page = AdjustPage(self.nb, self, s)
         self.material_page = MaterialPage(self.nb, self, s)
-        # 页签顺序：材料调差表在前，量增量减费用调整表在后
-        self.pages = [self.material_page, self.adjust_page]
-        self.nb.add(self.material_page, text="  " + self.material_page.TAB_TITLE + "  ")
-        self.nb.add(self.adjust_page, text="  " + self.adjust_page.TAB_TITLE + "  ")
+        self.sewer_page = SewerPage(self.nb, self, s)
+        # 页签顺序：材料调差表、量增量减费用调整表、雨污水工程计算
+        self.pages = [self.material_page, self.adjust_page, self.sewer_page]
+        for p in self.pages:
+            self.nb.add(p, text="  " + p.TAB_TITLE + "  ")
         self.nb.bind("<<NotebookTabChanged>>", lambda e: self._on_tab_changed())
 
         self.root.bind("<Control-s>", lambda e: self.do_save())
@@ -140,6 +159,22 @@ class App:
         except AttributeError:
             pass
 
+    def remember_dir(self, path):
+        """记住文件所在目录，下次打开/保存对话框直接定位。"""
+        folder = os.path.dirname(path or "")
+        if not folder or not os.path.isdir(folder):
+            return
+        if folder == self.last_dir:
+            return
+        self.last_dir = folder
+        try:
+            p = _config_path()
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as fh:
+                json.dump({"last_dir": folder}, fh, ensure_ascii=False)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------ 工程 --
     def project_data(self):
         for p in self.pages:
@@ -149,6 +184,7 @@ class App:
             "pages": {
                 "adjust": self.adjust_page.state(),
                 "material": self.material_page.state(),
+                "sewer": self.sewer_page.state(),
             },
         }
 
@@ -171,9 +207,7 @@ class App:
             messagebox.showerror("保存失败", str(exc))
             return
         self.file_path = path
-        folder = os.path.dirname(path)
-        if folder:
-            self.last_dir = folder
+        self.remember_dir(path)
         self.set_title(path)
         try:
             self.current_page().flash("已保存：%s" % os.path.basename(path), ok=True)
@@ -202,6 +236,7 @@ class App:
             if pages:
                 self.adjust_page.load_state(pages.get("adjust", {}))
                 self.material_page.load_state(pages.get("material", {}))
+                self.sewer_page.load_state(pages.get("sewer", {}))
             else:
                 # 兼容旧版工程（只有量增量减表）
                 self.adjust_page.load_state(data)
@@ -209,9 +244,7 @@ class App:
             messagebox.showerror("打开失败", "工程文件格式不正确：\n%s" % exc)
             return
         self.file_path = path
-        folder = os.path.dirname(path)
-        if folder:
-            self.last_dir = folder
+        self.remember_dir(path)
         self.set_title(path)
         for p in self.pages:
             p.refresh()

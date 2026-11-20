@@ -130,7 +130,11 @@ def compute_all(rows, keys, flt_text):
         f = f_own if f_own is not None else f_proj
         row["flt"] = own if f_own is not None else flt_text
         proj = fmt.parse_pct(flt_text)
-        row["flt_hint"] = fmt.fmt_pct(f_proj) if proj is not None else flt_text
+        # 只有填了本期数量的材料行才显示灰色风险幅度提示（分类行/插行不显示）
+        if fmt.parse_num(row.get("qty")) is None:
+            row["flt_hint"] = ""
+        else:
+            row["flt_hint"] = fmt.fmt_pct(f_proj) if proj is not None else flt_text
         # 空白或 0 的月份不计入平均（未实施的月份留空或填 0 即可）
         vals = [fmt.parse_num(row.get(k)) for k in keys]
         vals = [v for v in vals if v is not None and v != 0]
