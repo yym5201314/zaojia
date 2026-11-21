@@ -33,6 +33,10 @@ PROVIDERS = [
      ["doubao-pro-32k"], ["doubao-1.5-vision-pro", "doubao-vision-pro-32k"]),
     ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
      ["gemini-2.0-flash", "gemini-1.5-pro"], ["gemini-2.0-flash", "gemini-1.5-pro"]),
+    ("英伟达", "https://integrate.api.nvidia.com/v1",
+     ["nvidia/nemotron-3.5-lightning-30b-a3b", "nvidia/nemotron-3-ultra-550b-a55b",
+      "z-ai/glm-5.3-flash"],
+     ["nvidia/nemotron-3.5-super-vl-120b-a12b"]),
     ("自定义", "", [], []),
 ]
 
@@ -267,19 +271,32 @@ def chat(profile, messages, temperature=None, max_tokens=None, timeout=None):
     }
     if max_tokens:
         payload["max_tokens"] = int(max_tokens)
+    elif profile.get("engine") == "英伟达":
+        # NIM 默认输出上限偏小，表格行多会被截断
+        payload["max_tokens"] = 8192
     result = _request(profile, "/chat/completions", payload, timeout=timeout)
     try:
-        content = result["choices"][0]["message"]["content"]
+        message = result["choices"][0]["message"]
     except Exception:
         raise RuntimeError("返回格式无法解析：%s"
                            % json.dumps(result, ensure_ascii=False)[:300])
+    if not isinstance(message, dict):
+        raise RuntimeError("返回格式无法解析：%s"
+                           % json.dumps(result, ensure_ascii=False)[:300])
+    content = message.get("content")
     if isinstance(content, list):
         parts = []
         for item in content:
             if isinstance(item, dict) and isinstance(item.get("text"), str):
                 parts.append(item["text"])
         content = "".join(parts)
-    return (content or "").strip()
+    text = (content or "").strip() if isinstance(content, str) else ""
+    if not text:
+        # 带思考的模型（如 NVIDIA nemotron VL）可能只回 reasoning_content
+        reasoning = message.get("reasoning_content")
+        if isinstance(reasoning, str) and reasoning.strip():
+            text = reasoning.strip()
+    return text
 
 
 def test_connection(profile):

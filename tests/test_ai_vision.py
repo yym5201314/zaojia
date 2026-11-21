@@ -66,6 +66,11 @@ class VisionModelTest(unittest.TestCase):
             ai_model.default_profile("硅基流动")["model"]))
         self.assertNotIn("deepseek-vl2",
                          " ".join(ai_model.model_choices("硅基流动")))
+        self.assertEqual(ai_model.default_profile("英伟达")["model"],
+                         "nvidia/nemotron-3.5-super-vl-120b-a12b")
+        self.assertEqual(ai_model.provider_preset("英伟达")[1],
+                         "https://integrate.api.nvidia.com/v1")
+        self.assertEqual(ai_model.provider_preset("自定义")[1], "")
 
 
 class ImageEncodeTest(unittest.TestCase):

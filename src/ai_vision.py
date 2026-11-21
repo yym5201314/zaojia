@@ -20,7 +20,7 @@ SUPPORTED_EXTS = IMAGE_EXTS + PDF_EXTS
 MAX_PAGES = 8          # 一次最多识别页数，避免一次请求过大
 RENDER_DPI = 200       # PDF 渲染分辨率
 IMAGE_MAX_SIDE = 2200  # 送给模型的图片长边上限（图纸文字要够清晰）
-VISION_TIMEOUT = 180   # 视觉模型推理慢，单独放宽超时（秒）
+VISION_TIMEOUT = 240   # 视觉模型推理慢（120B 级尤甚），单独放宽超时（秒）
 
 # 表格字段（顺序即预览列顺序）
 FIELDS = [
